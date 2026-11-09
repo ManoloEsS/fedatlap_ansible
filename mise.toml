@@ -31,7 +31,7 @@ fd = "latest"
 # runtimes belong in each project's Mise configuration.
 go = "latest"
 uv = "latest"
-ansible = { version = "latest", expose = ["ansible-core"] }
+ansible = { version = "latest", python = "3.14", expose = ["ansible-core"] }
 fastfetch = "latest"
 
 [bootstrap.repos]
