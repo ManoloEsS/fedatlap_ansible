@@ -42,7 +42,7 @@
             baseurl: >-
               https://download.copr.fedorainfracloud.org/results/{{ item.owner }}/{{ item.project }}/fedora-{{ ansible_facts.distribution_major_version }}-{{ ansible_facts.architecture }}/
             gpgkey: >-
-              https://download.copr.fedorainfracloud.org/results/{{ item.owner }}/{{ item.project }}/pubkey.gpg              
+              https://download.copr.fedorainfracloud.org/results/{{ item.owner }}/{{ item.project }}/pubkey.gpg
             gpgcheck: true
             enabled: true
             includepkgs:
