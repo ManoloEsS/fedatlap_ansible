@@ -10,10 +10,6 @@
 
 - name: Install fonts
 
-- name: Install mise
-
-- name: Boostrap mise global config file
-
 - name: Bootstrap dotfiles and utilities
 
 - name: Install flatpaks

@@ -54,3 +54,4 @@ fastfetch = "latest"
 "~/.config/systemd/user" = { source = "dotfiles/systemd/.config/systemd/user", mode = "symlink-each" }
 "~/.config/starship.toml" = { source = "dotfiles/starship/.config/starship.toml", mode = "symlink" }
 "~/.config/nvim" = { source = "~/.local/share/fedora-laptop/sources/nvim", mode = "symlink" }
+"~/.config/alacritty" = { source = "dotfiles/alacritty/.config/alacritty", mode = "symlink-each" }
