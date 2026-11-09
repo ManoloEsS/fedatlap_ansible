@@ -1,0 +1,15 @@
+copr_repositories:
+  - name: ghostty
+    owner: scottames
+    project: ghostty
+    package: ghostty
+
+  - name: keyd
+    owner: alternateved
+    project: keyd
+    package: keyd
+
+vendor_repositories:
+  - name: tailscale
+    repo_url: https://pkgs.tailscale.com/stable/fedora/tailscale.repo
+    destination: /etc/yum.repos.d/tailscale.repo

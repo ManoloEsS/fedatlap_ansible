@@ -1,0 +1,13 @@
+packages:
+  - niri
+  - noctalia
+  - wtype
+  - gcc
+  - make
+  - wl-clipboard
+  - git-core
+  - openssh-server
+  - podman-compose
+  - ghostty
+  - keyd
+  - tailscale

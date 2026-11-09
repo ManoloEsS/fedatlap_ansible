@@ -15,3 +15,5 @@ mise.*.local.toml
 # Local logs and generated reports.
 *.log
 /reports/
+
+AGENTS.md

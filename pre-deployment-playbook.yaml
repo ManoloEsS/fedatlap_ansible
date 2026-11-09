@@ -1,0 +1,121 @@
+# Use --ask-become-pass when privilege escalation requires a password.
+- name: Pre-deployment play
+  hosts: localhost
+  tasks:
+    - name: Check for pending rpm-ostree deployment
+      ansible.builtin.command:
+        rpm-ostree status --pending-exit-77
+      register: ostree_status
+      changed_when: false
+      failed_when: ostree_status.rc not in [0, 77]
+      check_mode: false
+
+    - name: Stop if a reboot is needed
+      ansible.builtin.fail:
+        msg: An rpm-ostree deployment is pending. Reboot the system and run the playbook again.
+      when: ostree_status.rc == 77
+
+    - name: Verify external repositories manifest exists
+      ansible.builtin.stat:
+        path: "{{ playbook_dir }}/manifests/repositories.yaml"
+      register: extrepos_info
+
+    - name: Report skipped repository configuration
+      ansible.builtin.debug:
+        msg: "Repository manifest is missing or empty; skipping repository setup. Package installation may fail if a required repository is unavailable."
+      when: not extrepos_info.stat.exists or not extrepos_info.stat.isreg or extrepos_info.stat.size == 0
+
+    - block:
+        - name: Display if the external repositories file exists
+          ansible.builtin.debug:
+            msg: "External repos manifest exists"
+
+        - name: Read repositories list from manifest
+          ansible.builtin.include_vars:
+            file: "{{ playbook_dir }}/manifests/repositories.yaml"
+            name: repositories
+
+        - name: Add copr repositories
+          ansible.builtin.yum_repository:
+            name: "copr-{{ item.owner }}-{{ item.project }}"
+            description: "COPR {{ item.owner }}/{{ item.project }}"
+            baseurl: >-
+              https://download.copr.fedorainfracloud.org/results/{{ item.owner }}/{{ item.project }}/fedora-{{ ansible_facts.distribution_major_version }}-{{ ansible_facts.architecture }}/
+            gpgkey: >-
+              https://download.copr.fedorainfracloud.org/results/{{ item.owner }}/{{ item.project }}/pubkey.gpg              
+            gpgcheck: true
+            enabled: true
+            includepkgs:
+              - "{{ item.package }}"
+            skip_if_unavailable: false
+          loop: "{{ repositories.copr_repositories }}"
+          become: true
+
+        - name: Add vendor repositories
+          ansible.builtin.get_url:
+            url: "{{ item.repo_url }}"
+            dest: "{{ item.destination }}"
+            mode: '0644'
+            force: true
+          loop: "{{ repositories.vendor_repositories }}"
+          become: true
+
+      when: extrepos_info.stat.exists and extrepos_info.stat.isreg and extrepos_info.stat.size > 0
+
+
+    - name: Verify host packages manifest exists
+      ansible.builtin.stat:
+        path: "{{ playbook_dir }}/manifests/host-packages.yaml"
+      register: hostpkg_info
+
+    - name: Report skipped host packages task
+      ansible.builtin.debug:
+        msg: "Host packages manifest is missing or empty; skipping host package setup."
+      when: not hostpkg_info.stat.exists or not hostpkg_info.stat.isreg or hostpkg_info.stat.size == 0
+
+    - block:
+      - name: Display if the host packages file exists
+        ansible.builtin.debug:
+          msg: "Host packages manifest exists"
+
+      - name: Read packages list from manifest
+        ansible.builtin.include_vars:
+          file: "{{ playbook_dir }}/manifests/host-packages.yaml"
+          name: host_pkgs
+      
+      - name: Install host packages
+        community.general.rpm_ostree_pkg:
+          name: "{{ host_pkgs.packages }}"
+          state: present
+        become: true
+        register: host_install_result
+
+      - name: Check for a pending deployment after installation
+        ansible.builtin.command:
+          rpm-ostree status --pending-exit-77
+        register: post_install_status
+        changed_when: false
+        failed_when: post_install_status.rc not in [0, 77]
+        when: host_install_result is not skipped
+
+      - name: Report no reboot is needed
+        ansible.builtin.debug:
+          msg: "No reboot needed, proceed with post-deployment playbook"
+        when:
+          - host_install_result is not skipped
+          - post_install_status.rc == 0
+
+      - name: Report reboot needed
+        ansible.builtin.debug:
+          msg: "Packages successfully processed. Please reboot and run post-deployment playbook"
+        when:
+          - host_install_result is not skipped
+          - post_install_status.rc == 77
+
+      - name: Report skipped in check mode
+        ansible.builtin.debug:
+          msg: "Running in check mode, host package installation skipped"
+        when: 
+          - ansible_check_mode
+
+      when: hostpkg_info.stat.exists and hostpkg_info.stat.isreg and hostpkg_info.stat.size > 0

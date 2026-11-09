@@ -1,0 +1,19 @@
+- name: Install and enable keyd and keyd config
+
+- name: Set wifi power settings
+
+- name: Set battery thresholds
+
+- name: Enable services
+
+- name: Configure network zones
+
+- name: Install fonts
+
+- name: Install mise
+
+- name: Boostrap mise global config file
+
+- name: Bootstrap dotfiles and utilities
+
+- name: Install flatpaks
