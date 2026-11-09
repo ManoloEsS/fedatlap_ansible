@@ -20,7 +20,7 @@ installs the tools declared in `mise.toml`.
    password when needed:
 
    ```sh
-   "$HOME/.local/bin/mise" exec -- ansible-playbook -i inventory.ini -c local --ask-become-pass pre-deployment-playbook.yaml
+   "$HOME/.local/bin/mise" exec -- ansible-playbook -c local --ask-become-pass pre-deployment-playbook.yaml
    ```
 
 If the playbook reports that a reboot is needed, reboot before proceeding to
