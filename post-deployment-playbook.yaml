@@ -1,15 +1,227 @@
-- name: Install and enable keyd and keyd config
+- name: Post-deployment play
+  hosts: localhost
+  tasks:
+    - name: Check for pending rpm-ostree deployment
+      ansible.builtin.command:
+        rpm-ostree status --pending-exit-77
+      register: ostree_status
+      changed_when: false
+      failed_when: ostree_status.rc not in [0, 77]
+      check_mode: false
 
-- name: Set wifi power settings
+    - name: Stop if a reboot is needed
+      ansible.builtin.fail:
+        msg: An rpm-ostree deployment is pending. Reboot the system and run the playbook again.
+      when: ostree_status.rc == 77
 
-- name: Set battery thresholds
+    - name: Check keyd config template exists
+      ansible.builtin.stat:
+        path: "{{ playbook_dir }}/system/keyd/default.conf"
+      register: keyd_file
+        
+    - name: Report skipped keyd activation task
+      ansible.builtin.debug:
+        msg: "Keyd configuration template is missing or empty; skipping keyd activation setup."
+      when: not keyd_file.stat.exists or not keyd_file.stat.isreg or keyd_file.stat.size == 0
 
-- name: Enable services
+    - block:
+        - name: Display if the keyd configuration template exists
+          ansible.builtin.debug:
+            msg: "Keyd configuration template exists"
 
-- name: Configure network zones
+        - name: Get keyboard id input from user
+          ansible.builtin.pause:
+            prompt: >-
+              In another terminal, run 'sudo keyd monitor' and press a key on
+              the keyboard to configure. Enter its device ID here, or press
+              Enter to apply the remap to all keyboards
+          register: keyboard_id_input
 
-- name: Install fonts
+        - name: Create keyd template with user input
+          ansible.builtin.template:
+            src: "{{ playbook_dir }}/system/keyd/default.conf"
+            dest: /etc/keyd/default.conf
+            owner: root
+            group: root
+            mode: '0644'
+            backup: yes
+          vars:
+            keyboard_id: "{{ keyboard_id_input.user_input }}"
+          become: true
+          notify: Restart keyd
 
-- name: Bootstrap dotfiles and utilities
+        - name: Enable keyd service
+          ansible.builtin.systemd_service:
+            name: keyd
+            state: started
+            enabled: true
+          become: true
 
-- name: Install flatpaks
+        - name: Report successful keyd configuration
+          ansible.builtin.debug:
+            msg: "keyd configuration successful, service has been started and enabled"
+
+      when: keyd_file.stat.exists and keyd_file.stat.isreg and keyd_file.stat.size > 0
+
+    - name: Check Wi-Fi powersave configuration exists
+      ansible.builtin.stat:
+        path: "{{ playbook_dir }}/system/NetworkManager/wifi-powersave.conf"
+      register: wifi_config_file
+
+    - name: Report skipped Wi-Fi configuration
+      ansible.builtin.debug:
+        msg: "Wi-Fi powersave configuration is missing or empty; skipping Wi-Fi setup."
+      when: not wifi_config_file.stat.exists or not wifi_config_file.stat.isreg or wifi_config_file.stat.size == 0
+
+    - block:
+        - name: Set wifi power settings
+          ansible.builtin.copy:
+            src: "{{ playbook_dir }}/system/NetworkManager/wifi-powersave.conf"
+            dest: /etc/NetworkManager/conf.d/wifi-powersave.conf
+            owner: root
+            group: root
+            mode: '0644'
+            backup: yes
+          become: true
+          register: wifi_powersave_result
+
+        - name: Report wifi configuration needs reboot to apply
+          ansible.builtin.debug:
+            msg: "Network manager restart or reboot needed for network manager changes to be applied"
+          when: wifi_powersave_result.changed
+      when: wifi_config_file.stat.exists and wifi_config_file.stat.isreg and wifi_config_file.stat.size > 0
+      
+    - name: Prompt user for battery threshold setup
+      ansible.builtin.pause:
+        prompt: >-
+          Configure battery thresholds? This setup was designed for the ThinkPad
+          E14 Gen 5 and may affect other supported batteries. Enter 'yes' to
+          confirm, or press Enter to skip.
+      register: battery_conf_input
+
+    # block to check each file needed for battey threshold if confirmed
+    - block:
+      - name: Check battery threshold configuration files
+        ansible.builtin.stat:
+          path: "{{ playbook_dir }}/{{ item }}"
+        loop:
+          - system/udev/61-battery-local.hwdb
+          - system/battery/battery-thresholds-apply
+          - system/systemd/battery-thresholds.service
+        register: battery_config_files
+
+      - name: Report problem with files even if user opted in
+        ansible.builtin.debug:
+          msg: "Needed files weren't found. Skipping battery threshold setup"
+        when: >-
+          (battery_config_files.results | selectattr('stat.exists', 'equalto', true) | list | length != 3) or
+          (battery_config_files.results | selectattr('stat.isreg', 'equalto', true) | list | length != 3)
+
+      - block:
+        - name: Install battery threshold hardware database configuration
+          ansible.builtin.copy:
+            src: "{{ playbook_dir }}/system/udev/61-battery-local.hwdb"
+            dest: /etc/udev/hwdb.d/61-battery-local.hwdb
+            owner: root
+            group: root
+            mode: '0644'
+            backup: yes
+          become: true
+          register: battery_hwdb_result
+
+        - name: Install battery threshold helper
+          ansible.builtin.copy:
+            src: "{{ playbook_dir }}/system/battery/battery-thresholds-apply"
+            dest: /usr/local/bin/battery-thresholds-apply
+            owner: root
+            group: root
+            mode: '0755'
+            backup: yes
+          become: true
+          register: battery_helper_result
+
+        - name: Install battery threshold service
+          ansible.builtin.copy:
+            src: "{{ playbook_dir }}/system/systemd/battery-thresholds.service"
+            dest: /etc/systemd/system/battery-thresholds.service
+            owner: root
+            group: root
+            mode: '0644'
+            backup: yes
+          become: true
+          register: battery_service_result
+
+        - name: Rebuild hardware database
+          ansible.builtin.command: systemd-hwdb update
+          become: true
+          when: battery_hwdb_result.changed and not ansible_check_mode
+
+        - name: Refresh power supply device properties
+          ansible.builtin.command: udevadm trigger --subsystem-match=power_supply --action=change
+          become: true
+          when: battery_hwdb_result.changed and not ansible_check_mode
+
+        - name: Gather service status for UPower
+          ansible.builtin.service_facts:
+          when: battery_hwdb_result.changed and not ansible_check_mode
+
+        - name: Restart UPower if it is running
+          ansible.builtin.systemd_service:
+            name: upower.service
+            state: restarted
+          become: true
+          when:
+            - battery_hwdb_result.changed
+            - not ansible_check_mode
+            - "'upower.service' in ansible_facts.services"
+            - ansible_facts.services['upower.service'].state == 'running'
+
+        - name: Report unavailable or inactive UPower
+          ansible.builtin.debug:
+            msg: "UPower is unavailable or inactive; battery thresholds will apply when it starts."
+          when:
+            - battery_hwdb_result.changed
+            - not ansible_check_mode
+            - "'upower.service' not in ansible_facts.services or ansible_facts.services['upower.service'].state != 'running'"
+
+        - name: Reload systemd after battery service changes
+          ansible.builtin.systemd_service:
+            daemon_reload: true
+          become: true
+          when: battery_service_result.changed and not ansible_check_mode
+
+        - name: Enable and start battery threshold service
+          ansible.builtin.systemd_service:
+            name: battery-thresholds.service
+            enabled: true
+            state: started
+          become: true
+          when: not ansible_check_mode
+
+        when:
+          - battery_config_files.results | selectattr('stat.exists', 'equalto', true) | list | length == 3
+          - battery_config_files.results | selectattr('stat.isreg', 'equalto', true) | list | length == 3
+
+      when: battery_conf_input.user_input | trim | lower == 'yes'
+
+    - name: Report skipped battery threshold configuration
+      ansible.builtin.debug:
+        msg: User opted out of battery threshold configuration, skipping
+      when: battery_conf_input.user_input | trim | lower != 'yes'
+
+    - name: Enable services
+
+    - name: Configure network zones
+
+    - name: Install fonts
+
+    - name: Bootstrap dotfiles and utilities
+
+    - name: Install flatpaks
+
+  handlers:
+    - name: Restart keyd
+      ansible.builtin.systemd_service:
+        name: keyd
+        state: restarted
+      become: true
