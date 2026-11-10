@@ -209,9 +209,48 @@
         msg: User opted out of battery threshold configuration, skipping
       when: battery_conf_input.user_input | trim | lower != 'yes'
 
-    - name: Enable services
+    - name: Enable ssh and tailscale service
+      ansible.builtin.systemd_service:
+        name: "{{ item }}"
+        state: started
+        enabled: true
+      loop:
+        - sshd.service
+        - tailscaled.service
+      become: true
 
-    - name: Configure network zones
+    - name: Check that firewall is installed and active
+      ansible.builtin.service_facts:
+        
+    - name: Check that public.xml file exists
+      ansible.builtin.stat:
+        path: "{{ playbook_dir }}/system/firewalld/zones/public.xml"
+      register: public_xml_file
+
+    - name: Report skip if firewall is not installed or active, or xml file doesn't exist
+      ansible.builtin.debug:
+        msg: "Firewall is not installed and active or public.xml file was not found. Skipping setting up firewall zones"
+      when: >-
+        'firewalld.service' not in ansible_facts.services or ansible_facts.services['firewalld.service'].state != 'running' or
+        not public_xml_file.stat.exists
+
+    - block:
+      - name: Install zones file
+
+      - name: Reload firewall if zones file is changed
+
+      - name: Gather trusted connection UUIDs from user
+
+      - name: Inspect saved NetworkManager connections
+
+      - name: Assign the appropriate zone to each relevant connection
+
+      - name: Set the default firewalld zone to public
+      when:
+        - "'firewalld.service' in ansible_facts.services and ansible_facts.services['firewalld.service'].state == 'running'"
+        - public_xml_file.stat.exists
+
+
 
     - name: Install fonts
 
