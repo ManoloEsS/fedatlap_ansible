@@ -236,21 +236,99 @@
 
     - block:
       - name: Install zones file
+        ansible.builtin.copy:
+          src: "{{ playbook_dir }}/system/firewalld/zones/public.xml"
+          dest: /etc/firewalld/zones/public.xml
+          owner: root
+          group: root
+          mode: '0644'
+          backup: yes
+        become: true
+        register: firewall_zones_result
 
       - name: Reload firewall if zones file is changed
+        ansible.builtin.command: firewall-cmd --reload
+        become: true
+        when: firewall_zones_result.changed and not ansible_check_mode
 
       - name: Gather trusted connection UUIDs from user
+        ansible.builtin.pause:
+          prompt: |-
+            Enter UUIDs for trusted networks, separated by spaces.
+            In another terminal, run 'nmcli connection show' to find them.
+            Do not include Tailscale.
+            Press Enter for no trusted connections; applicable connections will use the public zone.
+        register: uuid_input
+
+      - name: List saved NetworkManager connection UUIDs
+        ansible.builtin.command:
+          argv:
+            - nmcli
+            - --get-values
+            - UUID
+            - connection
+            - show
+        register: connection_uuids
+        changed_when: false
+        check_mode: false
 
       - name: Inspect saved NetworkManager connections
+        ansible.builtin.command:
+          argv:
+            - nmcli
+            - --get-values
+            - connection.id,connection.type,connection.zone
+            - connection
+            - show
+            - uuid
+            - "{{ item }}"
+        loop: "{{ connection_uuids.stdout_lines }}"
+        register: connection_details
+        changed_when: false
+        check_mode: false
 
       - name: Assign the appropriate zone to each relevant connection
+        ansible.builtin.command:
+          argv:
+            - nmcli
+            - connection
+            - modify
+            - uuid
+            - "{{ item.item }}"
+            - connection.zone
+            - "{{ desired_zone }}"
+        vars:
+          details: "{{ item.stdout.split('\n') }}"
+          connection_name: "{{ details[0] }}"
+          connection_type: "{{ details[1] }}"
+          current_zone: "{{ details[2] | default('') }}"
+          trusted_uuids: "{{ uuid_input.user_input.split() }}"
+          desired_zone: >-
+            {{ 'FedoraWorkstation'
+               if connection_type in ['802-11-wireless', '802-3-ethernet']
+                  and item.item in trusted_uuids
+               else 'public' }}
+        loop: "{{ connection_details.results }}"
+        when:
+          - connection_type in ['802-11-wireless', '802-3-ethernet', 'tun']
+          - not (connection_type == 'tun' and connection_name == 'tailscale0')
+          - current_zone != desired_zone
+          - not ansible_check_mode
+        become: true
+
+      - name: Check the default firewalld zone
+        ansible.builtin.command: firewall-cmd --get-default-zone
+        register: firewall_default_zone
+        changed_when: false
+        check_mode: false
 
       - name: Set the default firewalld zone to public
+        ansible.builtin.command: firewall-cmd --set-default-zone=public
+        become: true
+        when: firewall_default_zone.stdout | trim != 'public' and not ansible_check_mode
       when:
         - "'firewalld.service' in ansible_facts.services and ansible_facts.services['firewalld.service'].state == 'running'"
         - public_xml_file.stat.exists
-
-
 
     - name: Install fonts
 
