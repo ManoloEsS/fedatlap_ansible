@@ -1,2 +1,4 @@
 # Flatpak app IDs, installed system-wide from Flathub.
+flatpaks:
+
 # com.freerdp.FreeRDP
