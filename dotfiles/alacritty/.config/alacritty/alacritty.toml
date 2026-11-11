@@ -18,7 +18,7 @@ osc52 = "CopyPaste"
 [window]
 padding = { x = 5, y = 5 }
 decorations = "None"
-opacity = 0.90
+opacity = 1
 
 # Cursor
 [cursor]
