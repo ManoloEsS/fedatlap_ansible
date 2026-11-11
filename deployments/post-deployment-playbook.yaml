@@ -635,10 +635,10 @@
           - xdg-settings
           - set
           - default-web-browser
-          - firefox.desktop
+          - org.mozilla.firefox.desktop
       when:
         - default_browser.rc == 0
-        - default_browser.stdout | trim != 'firefox.desktop'
+        - default_browser.stdout | trim != 'org.mozilla.firefox.desktop'
         - not ansible_check_mode
 
     - name: Report unavailable default browser setting
