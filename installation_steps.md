@@ -35,8 +35,8 @@ installs the tools declared in `mise.toml`.
    setup, and trusted network UUIDs. An empty keyd response applies the remap
    to all keyboards. It also applies Mise dotfiles with force, replacing
    conflicting files without backups. Firewall changes may interrupt an SSH
-   connection. The post-deployment workflow has not yet been validated
-   end-to-end.
+   connection. The playbook completed on one target; a fully fresh installation
+   has not yet been validated end-to-end.
 
 6. Optional: enable automatic login after confirming that Niri is selected and
    works at the GDM login screen. Edit `/etc/gdm/custom.conf` with administrator
