@@ -646,23 +646,6 @@
         msg: "Could not read the default browser; Firefox was not set as the default."
       when: default_browser.rc != 0
 
-    - name: Ensure GDM daemon section exists
-      become: true
-      ansible.builtin.lineinfile:
-        path: /etc/gdm/custom.conf
-        line: "[daemon]"
-        create: true
-        insertafter: EOF
-
-    - name: Set GDM automatic login
-      become: true
-      ansible.builtin.blockinfile:
-        path: /etc/gdm/custom.conf
-        insertafter: '^\[daemon\]$'
-        block: |
-          AutomaticLoginEnable=True
-          AutomaticLogin=your_username
-
   handlers:
     - name: Restart keyd
       ansible.builtin.systemd_service:
