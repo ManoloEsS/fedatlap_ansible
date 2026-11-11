@@ -1,0 +1,35 @@
+- name: Create font destination directory
+  ansible.builtin.file:
+    path: "~/.local/share/fonts/{{ item.directory }}"
+    state: directory
+    mode: '0755'
+
+- name: Download and install font
+  when: not ansible_check_mode
+  block:
+    - name: Create temporary directory for font archive
+      ansible.builtin.tempfile:
+        state: directory
+        prefix: font-
+      register: font_temp
+
+    - name: Download and verify font archive
+      ansible.builtin.get_url:
+        url: "{{ item.url }}"
+        dest: "{{ font_temp.path }}/font.tar.xz"
+        checksum: "sha256:{{ item.sha256 }}"
+        mode: '0644'
+
+    - name: Extract font archive
+      ansible.builtin.unarchive:
+        src: "{{ font_temp.path }}/font.tar.xz"
+        dest: "~/.local/share/fonts/{{ item.directory }}"
+        remote_src: true
+      notify: Refresh font cache
+
+  always:
+    - name: Remove temporary font directory
+      ansible.builtin.file:
+        path: "{{ font_temp.path }}"
+        state: absent
+      when: font_temp.path is defined

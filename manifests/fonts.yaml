@@ -1,0 +1,7 @@
+fonts:
+  - name: JetBrainsMono Nerd Font
+    version: v3.5.1
+    url: "https://github.com/ryanoasis/nerd-fonts/releases/download/v3.5.1/JetBrainsMono.tar.xz"
+    sha256: 04d5e8f903693f9dd13e16f867e994834e681eb3c72c0d337a770dcda09010cf
+    directory: JetBrainsMono Nerd Font
+

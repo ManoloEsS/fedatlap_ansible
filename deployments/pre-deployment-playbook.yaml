@@ -17,7 +17,7 @@
 
     - name: Verify external repositories manifest exists
       ansible.builtin.stat:
-        path: "{{ playbook_dir }}/manifests/repositories.yaml"
+        path: "{{ playbook_dir }}/../manifests/repositories.yaml"
       register: extrepos_info
 
     - name: Report skipped repository configuration
@@ -32,7 +32,7 @@
 
         - name: Read repositories list from manifest
           ansible.builtin.include_vars:
-            file: "{{ playbook_dir }}/manifests/repositories.yaml"
+            file: "{{ playbook_dir }}/../manifests/repositories.yaml"
             name: repositories
 
         - name: Add copr repositories
@@ -65,7 +65,7 @@
 
     - name: Verify host packages manifest exists
       ansible.builtin.stat:
-        path: "{{ playbook_dir }}/manifests/host-packages.yaml"
+        path: "{{ playbook_dir }}/../manifests/host-packages.yaml"
       register: hostpkg_info
 
     - name: Report skipped host packages task
@@ -80,7 +80,7 @@
 
       - name: Read packages list from manifest
         ansible.builtin.include_vars:
-          file: "{{ playbook_dir }}/manifests/host-packages.yaml"
+          file: "{{ playbook_dir }}/../manifests/host-packages.yaml"
           name: host_pkgs
       
       - name: Install host packages

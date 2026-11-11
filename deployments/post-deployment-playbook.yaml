@@ -16,7 +16,7 @@
 
     - name: Check keyd config template exists
       ansible.builtin.stat:
-        path: "{{ playbook_dir }}/system/keyd/default.conf"
+        path: "{{ playbook_dir }}/../system/keyd/default.conf"
       register: keyd_file
         
     - name: Report skipped keyd activation task
@@ -37,9 +37,18 @@
               Enter to apply the remap to all keyboards
           register: keyboard_id_input
 
+        - name: Ensure keyd configuration directory exists
+          ansible.builtin.file:
+            path: /etc/keyd
+            state: directory
+            owner: root
+            group: root
+            mode: '0755'
+          become: true
+
         - name: Create keyd template with user input
           ansible.builtin.template:
-            src: "{{ playbook_dir }}/system/keyd/default.conf"
+            src: "{{ playbook_dir }}/../system/keyd/default.conf"
             dest: /etc/keyd/default.conf
             owner: root
             group: root
@@ -65,7 +74,7 @@
 
     - name: Check Wi-Fi powersave configuration exists
       ansible.builtin.stat:
-        path: "{{ playbook_dir }}/system/NetworkManager/wifi-powersave.conf"
+        path: "{{ playbook_dir }}/../system/NetworkManager/wifi-powersave.conf"
       register: wifi_config_file
 
     - name: Report skipped Wi-Fi configuration
@@ -74,9 +83,18 @@
       when: not wifi_config_file.stat.exists or not wifi_config_file.stat.isreg or wifi_config_file.stat.size == 0
 
     - block:
+        - name: Ensure NetworkManager configuration directory exists
+          ansible.builtin.file:
+            path: /etc/NetworkManager/conf.d
+            state: directory
+            owner: root
+            group: root
+            mode: '0755'
+          become: true
+
         - name: Set wifi power settings
           ansible.builtin.copy:
-            src: "{{ playbook_dir }}/system/NetworkManager/wifi-powersave.conf"
+            src: "{{ playbook_dir }}/../system/NetworkManager/wifi-powersave.conf"
             dest: /etc/NetworkManager/conf.d/wifi-powersave.conf
             owner: root
             group: root
@@ -103,7 +121,7 @@
     - block:
       - name: Check battery threshold configuration files
         ansible.builtin.stat:
-          path: "{{ playbook_dir }}/{{ item }}"
+          path: "{{ playbook_dir }}/../{{ item }}"
         loop:
           - system/udev/61-battery-local.hwdb
           - system/battery/battery-thresholds-apply
@@ -118,9 +136,22 @@
           (battery_config_files.results | selectattr('stat.isreg', 'equalto', true) | list | length != 3)
 
       - block:
+        - name: Ensure battery configuration directories exist
+          ansible.builtin.file:
+            path: "{{ item }}"
+            state: directory
+            owner: root
+            group: root
+            mode: '0755'
+          loop:
+            - /etc/udev/hwdb.d
+            - /usr/local/bin
+            - /etc/systemd/system
+          become: true
+
         - name: Install battery threshold hardware database configuration
           ansible.builtin.copy:
-            src: "{{ playbook_dir }}/system/udev/61-battery-local.hwdb"
+            src: "{{ playbook_dir }}/../system/udev/61-battery-local.hwdb"
             dest: /etc/udev/hwdb.d/61-battery-local.hwdb
             owner: root
             group: root
@@ -131,7 +162,7 @@
 
         - name: Install battery threshold helper
           ansible.builtin.copy:
-            src: "{{ playbook_dir }}/system/battery/battery-thresholds-apply"
+            src: "{{ playbook_dir }}/../system/battery/battery-thresholds-apply"
             dest: /usr/local/bin/battery-thresholds-apply
             owner: root
             group: root
@@ -142,7 +173,7 @@
 
         - name: Install battery threshold service
           ansible.builtin.copy:
-            src: "{{ playbook_dir }}/system/systemd/battery-thresholds.service"
+            src: "{{ playbook_dir }}/../system/systemd/battery-thresholds.service"
             dest: /etc/systemd/system/battery-thresholds.service
             owner: root
             group: root
@@ -219,12 +250,46 @@
         - tailscaled.service
       become: true
 
+    - name: Report Tailscale SSH requirements
+      ansible.builtin.debug:
+        msg: "Tailscale SSH requires this device to be authenticated and allowed by your tailnet policy. Enabling it can interrupt SSH sessions over a Tailscale IP."
+      when: not ansible_check_mode
+
+    - name: Check whether Tailscale SSH is enabled
+      ansible.builtin.command:
+        argv:
+          - tailscale
+          - get
+          - ssh
+      register: tailscale_ssh_preference
+      changed_when: false
+      become: true
+      when: not ansible_check_mode
+
+    - name: Validate Tailscale SSH preference output
+      ansible.builtin.assert:
+        that:
+          - tailscale_ssh_preference.stdout | trim | lower in ['true', 'false']
+        fail_msg: "Could not determine the Tailscale SSH preference; refusing to change it."
+      when: not ansible_check_mode
+
+    - name: Enable Tailscale SSH
+      ansible.builtin.command:
+        argv:
+          - tailscale
+          - set
+          - --ssh
+      become: true
+      when:
+        - not ansible_check_mode
+        - tailscale_ssh_preference.stdout | trim | lower == 'false'
+
     - name: Check that firewall is installed and active
       ansible.builtin.service_facts:
         
     - name: Check that public.xml file exists
       ansible.builtin.stat:
-        path: "{{ playbook_dir }}/system/firewalld/zones/public.xml"
+        path: "{{ playbook_dir }}/../system/firewalld/zones/public.xml"
       register: public_xml_file
 
     - name: Report skip if firewall is not installed or active, or xml file doesn't exist
@@ -235,9 +300,18 @@
         not public_xml_file.stat.exists
 
     - block:
+      - name: Ensure firewalld zones directory exists
+        ansible.builtin.file:
+          path: /etc/firewalld/zones
+          state: directory
+          owner: root
+          group: root
+          mode: '0755'
+        become: true
+
       - name: Install zones file
         ansible.builtin.copy:
-          src: "{{ playbook_dir }}/system/firewalld/zones/public.xml"
+          src: "{{ playbook_dir }}/../system/firewalld/zones/public.xml"
           dest: /etc/firewalld/zones/public.xml
           owner: root
           group: root
@@ -330,11 +404,264 @@
         - "'firewalld.service' in ansible_facts.services and ansible_facts.services['firewalld.service'].state == 'running'"
         - public_xml_file.stat.exists
 
-    - name: Install fonts
+    - name: Check that fonts manifest file exists
+      ansible.builtin.stat:
+        path: "{{ playbook_dir }}/../manifests/fonts.yaml"
+      register: fonts_file
 
-    - name: Bootstrap dotfiles and utilities
+    - name: Report skip if fonts manifest file doesn't exist
+      ansible.builtin.debug:
+        msg: "No fonts manifest found. Skipping fonts installation task"
+      when:
+        - not fonts_file.stat.exists
+      
+    - block: 
+      - name: Read fonts list from manifest
+        ansible.builtin.include_vars:
+          file: "{{ playbook_dir }}/../manifests/fonts.yaml"
+          name: fonts_content
 
-    - name: Install flatpaks
+      - name: Install fonts
+        ansible.builtin.include_tasks: fonts_tasks.yaml
+        loop: "{{ fonts_content.fonts | default( [], true) }}"
+
+      when:
+        - fonts_file.stat.exists
+
+    - name: Check for user-local Ghostty terminfo
+      ansible.builtin.stat:
+        path: "{{ ansible_facts.env.HOME }}/.terminfo/x/xterm-ghostty"
+      register: ghostty_terminfo
+
+    - name: Install user-local Ghostty terminfo
+      ansible.builtin.command:
+        argv:
+          - tic
+          - -x
+          - "{{ playbook_dir }}/../dotfiles/terminfo/xterm-ghostty.ti"
+      environment:
+        TERMINFO: "{{ ansible_facts.env.HOME }}/.terminfo"
+      when: not ghostty_terminfo.stat.exists and not ansible_check_mode
+
+    - name: Report Ghostty terminfo installation in check mode
+      ansible.builtin.debug:
+        msg: "Ghostty terminfo is missing and would be installed."
+      when: not ghostty_terminfo.stat.exists and ansible_check_mode
+
+    - name: Apply and update mise bootstrap repos
+      block:
+        - name: Apply mise bootstrap repos
+          ansible.builtin.command: "{{ ansible_facts.env.HOME }}/.local/bin/mise bootstrap repos apply --skip-dirty"
+          args: 
+            chdir: "{{ playbook_dir }}/.."
+          register: bootstrap_apply_result
+
+        - name: Report output of mise bootstrap repos apply
+          ansible.builtin.debug: 
+            msg: |-
+              {{ bootstrap_apply_result.stdout }}
+              {{ bootstrap_apply_result.stderr }}
+
+        - name: Update mise bootstrap repos
+          ansible.builtin.command: "{{ ansible_facts.env.HOME }}/.local/bin/mise bootstrap repos update --skip-dirty"
+          args: 
+            chdir: "{{ playbook_dir }}/.."
+          register: bootstrap_update_result
+
+        - name: Report output of mise bootstrap repos update
+          ansible.builtin.debug: 
+            msg: |-
+              {{ bootstrap_update_result.stdout }}
+              {{ bootstrap_update_result.stderr }}
+
+      when:
+        - not ansible_check_mode
+        
+    - name: Bootstrap mise dotfiles
+      block:
+        - name: Run bootstrap dotfiles command
+          ansible.builtin.command: "{{ ansible_facts.env.HOME }}/.local/bin/mise bootstrap dotfiles apply --force --yes"
+          args: 
+            chdir: "{{ playbook_dir }}/.."
+          register: dotfiles_result
+
+        - name: Report output of mise bootstrap dotfiles
+          ansible.builtin.debug: 
+            msg: |-
+              {{ dotfiles_result.stdout }}
+              {{ dotfiles_result.stderr }}
+      when:
+        - not ansible_check_mode
+
+    - name: Ensure Niri configuration directory exists
+      ansible.builtin.file:
+        path: "{{ ansible_facts.env.HOME }}/.config/niri"
+        state: directory
+        mode: '0755'
+
+    - name: Create Niri local output configuration if absent
+      ansible.builtin.copy:
+        src: "{{ playbook_dir }}/../profiles/laptop/local.kdl.example"
+        dest: "{{ ansible_facts.env.HOME }}/.config/niri/local.kdl"
+        mode: '0644'
+        force: false
+      when: not ansible_check_mode
+
+    - name: Create Niri touchpad configuration if absent
+      ansible.builtin.copy:
+        content: "// Touchpad enabled (managed by toggle-touchpad).\n"
+        dest: "{{ ansible_facts.env.HOME }}/.config/niri/touchpad.kdl"
+        mode: '0644'
+        force: false
+      when: not ansible_check_mode
+
+
+    - name: Install Yazi packages
+      ansible.builtin.command:
+        argv:
+          - "{{ ansible_facts.env.HOME }}/.local/bin/mise"
+          - exec
+          - --
+          - ya
+          - pkg
+          - install
+        chdir: "{{ playbook_dir }}/.."
+      when: not ansible_check_mode
+
+    - name: List Toolbx containers
+      ansible.builtin.command:
+        argv:
+          - toolbox
+          - list
+          - --containers
+      register: toolbox_containers
+      changed_when: false
+      check_mode: false
+
+    - name: Create dev Toolbx container if absent
+      ansible.builtin.command:
+        argv:
+          - toolbox
+          - create
+          - --assumeyes
+          - dev
+      when:
+        - toolbox_containers.stdout_lines | select('match', '^\S+\s+dev(?:\s|$)') | list | length == 0
+        - not ansible_check_mode
+
+    - name: Check Toolbx packages manifest exists
+      ansible.builtin.stat:
+        path: "{{ playbook_dir }}/../manifests/toolbox-packages.yaml"
+      register: toolbox_manifest_file
+
+    - name: Report skipped Toolbx package installation
+      ansible.builtin.debug:
+        msg: "Toolbx packages manifest is missing; skipping package installation."
+      when: not toolbox_manifest_file.stat.exists
+
+    - block:
+        - name: Load Toolbx packages manifest
+          ansible.builtin.include_vars:
+            file: "{{ playbook_dir }}/../manifests/toolbox-packages.yaml"
+            name: toolbox_manifest
+
+        - name: Install packages inside dev Toolbx
+          ansible.builtin.command:
+            argv: "{{ ['toolbox', 'run', '--container', 'dev', 'sudo', 'dnf', 'install', '-y'] + (toolbox_manifest.toolbox_pkgs | default([], true)) }}"
+          when:
+            - toolbox_manifest.toolbox_pkgs | default([], true) | length > 0
+            - not ansible_check_mode
+      when: toolbox_manifest_file.stat.exists
+
+    - name: Ensure system Flathub remote is present
+      community.general.flatpak_remote:
+        name: flathub
+        flatpakrepo_url: https://flathub.org/repo/flathub.flatpakrepo
+        method: system
+        state: present
+      become: true
+      register: flathub_remote_result
+
+    - name: Check Flatpak manifest exists
+      ansible.builtin.stat:
+        path: "{{ playbook_dir }}/../manifests/flatpaks.yaml"
+      register: flatpak_manifest_file
+
+    - name: Report skipped Flatpak installation
+      ansible.builtin.debug:
+        msg: "Flatpak manifest is missing; skipping app installation."
+      when: not flatpak_manifest_file.stat.exists
+
+    - block:
+        - name: Load Flatpak manifest
+          ansible.builtin.include_vars:
+            file: "{{ playbook_dir }}/../manifests/flatpaks.yaml"
+            name: flatpak_manifest
+
+        - name: Install system Flatpak applications
+          community.general.flatpak:
+            name: "{{ flatpak_manifest.flatpaks | default([], true) }}"
+            remote: flathub
+            method: system
+            state: present
+          become: true
+          when:
+            - flatpak_manifest.flatpaks | default([], true) | length > 0
+            - not (ansible_check_mode and flathub_remote_result.changed)
+
+        - name: Report Flatpak check-mode limitation
+          ansible.builtin.debug:
+            msg: "Flatpak installation cannot be checked until the Flathub remote is created."
+          when:
+            - flatpak_manifest.flatpaks | default([], true) | length > 0
+            - ansible_check_mode
+            - flathub_remote_result.changed
+      when: flatpak_manifest_file.stat.exists
+
+    - name: Check the current default browser
+      ansible.builtin.command:
+        argv:
+          - xdg-settings
+          - get
+          - default-web-browser
+      register: default_browser
+      changed_when: false
+      failed_when: false
+      check_mode: false
+
+    - name: Set Firefox as the default browser
+      ansible.builtin.command:
+        argv:
+          - xdg-settings
+          - set
+          - default-web-browser
+          - firefox.desktop
+      when:
+        - default_browser.rc == 0
+        - default_browser.stdout | trim != 'firefox.desktop'
+        - not ansible_check_mode
+
+    - name: Report unavailable default browser setting
+      ansible.builtin.debug:
+        msg: "Could not read the default browser; Firefox was not set as the default."
+      when: default_browser.rc != 0
+
+    - name: Ensure GDM daemon section exists
+      become: true
+      ansible.builtin.lineinfile:
+        path: /etc/gdm/custom.conf
+        line: "[daemon]"
+        create: true
+        insertafter: EOF
+
+    - name: Set GDM automatic login
+      become: true
+      ansible.builtin.blockinfile:
+        path: /etc/gdm/custom.conf
+        insertafter: '^\[daemon\]$'
+        block: |
+          AutomaticLoginEnable=True
+          AutomaticLogin=your_username
 
   handlers:
     - name: Restart keyd
@@ -342,3 +669,6 @@
         name: keyd
         state: restarted
       become: true
+
+    - name: Refresh font cache
+      ansible.builtin.command: fc-cache
