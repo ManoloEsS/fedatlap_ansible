@@ -2,7 +2,9 @@
 
 Run these steps as your regular user from the root of this repository on the
 Fedora Silverblue workstation. The Mise bootstrap requires network access and
-installs the tools declared in `mise.toml`.
+installs the tools declared in `mise.toml` and the Ansible collections declared
+in `deployments/requirements.yml` into the ignored `.ansible/collections/`
+directory in this checkout.
 
 1. Install Mise and the declared tools:
 
@@ -10,22 +12,16 @@ installs the tools declared in `mise.toml`.
    bash scripts/bootstrap-mise.sh
    ```
 
-2. Install the required Ansible collection to your user account:
-
-   ```sh
-   "$HOME/.local/bin/mise" exec -- ansible-galaxy collection install -r deployments/requirements.yml
-   ```
-
-3. Run the pre-deployment playbook locally. Ansible will prompt for your sudo
+2. Run the pre-deployment playbook locally. Ansible will prompt for your sudo
    password when needed:
 
    ```sh
    "$HOME/.local/bin/mise" exec -- ansible-playbook -c local --ask-become-pass deployments/pre-deployment-playbook.yaml
    ```
 
-4. If the playbook reports that a reboot is needed, reboot before proceeding.
+3. If the playbook reports that a reboot is needed, reboot before proceeding.
 
-5. Run the post-deployment playbook from the repository root:
+4. Run the post-deployment playbook from the repository root:
 
    ```sh
    "$HOME/.local/bin/mise" exec -- ansible-playbook -c local --ask-become-pass deployments/post-deployment-playbook.yaml
@@ -38,7 +34,7 @@ installs the tools declared in `mise.toml`.
    connection. The playbook completed on one target; a fully fresh installation
    has not yet been validated end-to-end.
 
-6. Optional: enable automatic login after confirming that Niri is selected and
+5. Optional: enable automatic login after confirming that Niri is selected and
    works at the GDM login screen. Edit `/etc/gdm/custom.conf` with administrator
    privileges and set `AutomaticLoginEnable=True` and `AutomaticLogin` to your
    username under the existing `[daemon]` section. Avoid duplicate settings or

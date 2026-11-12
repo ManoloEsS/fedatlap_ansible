@@ -16,4 +16,5 @@ mise.*.local.toml
 *.log
 /reports/
 
-AGENTS.md
+# Project-local Ansible collections installed by ansible-galaxy.
+/.ansible/collections/

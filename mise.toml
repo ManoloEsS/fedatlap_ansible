@@ -2,6 +2,10 @@
 # Install Mise to ~/.local/bin, then: mise install && mise upgrade
 min_version = { hard = "2026.9.4" }
 
+[tasks.ansible-collections]
+description = "Install project-local Ansible collections"
+run = "ansible-galaxy collection install -r deployments/requirements.yml -p .ansible/collections"
+
 [tools]
 "aqua:herdrdev/herdr" = "latest"
 yazi = "latest"
