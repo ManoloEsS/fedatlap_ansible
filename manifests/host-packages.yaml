@@ -11,3 +11,6 @@ packages:
   - ghostty
   - keyd
   - tailscale
+  - oo7-daemon
+  - oo7-portal
+  - pam_oo7

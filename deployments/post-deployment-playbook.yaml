@@ -404,6 +404,13 @@
         - "'firewalld.service' in ansible_facts.services and ansible_facts.services['firewalld.service'].state == 'running'"
         - public_xml_file.stat.exists
 
+    - name: Enable oo7 secrets service
+      ansible.builtin.systemd_service:
+        name: oo7-daemon.service
+        scope: user
+        enabled: true
+        state: started
+
     - name: Check that fonts manifest file exists
       ansible.builtin.stat:
         path: "{{ playbook_dir }}/../manifests/fonts.yaml"
